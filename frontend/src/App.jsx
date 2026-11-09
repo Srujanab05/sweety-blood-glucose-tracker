@@ -25,11 +25,20 @@ import {
 import "./App.css";
 
 const API = "http://localhost:5000";
+const authInputStyle = { width: "100%", boxSizing: "border-box", padding: "13px 14px", border: "1px solid #eadde5", borderRadius: 10, fontSize: 15, outlineColor: "#d94f83" };
+const authButtonStyle = { width: "100%", padding: 14, border: 0, borderRadius: 10, background: "#d94f83", color: "white", fontSize: 16, fontWeight: 700, cursor: "pointer" };
 
 function App() {
-  const [user, setUser] = useState(
-    JSON.parse(localStorage.getItem("user")) || null
-  );
+  const [user, setUser] = useState(() => {
+    const savedToken = localStorage.getItem("token");
+    const savedUser = localStorage.getItem("user");
+    if (!savedToken || !savedUser) return null;
+    try { return JSON.parse(savedUser); } catch { return null; }
+  });
+  const [authMode, setAuthMode] = useState("login");
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
+  const [authMessage, setAuthMessage] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
 
   const [readings, setReadings] = useState([]);
   const [reports, setReports] = useState(null);
@@ -52,6 +61,49 @@ function App() {
   const config = {
     headers: {
       Authorization: `Bearer ${token}`
+    }
+  };
+
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthMessage("");
+    setAuthLoading(true);
+    try {
+      if (authMode === "signup") {
+        const response = await axios.post(`${API}/api/auth/signup`, {
+          name: authForm.name.trim(),
+          email: authForm.email.trim(),
+          password: authForm.password
+        });
+        const returnedToken = response.data.token;
+        const returnedUser = response.data.user;
+        if (returnedToken && returnedUser) {
+          localStorage.setItem("token", returnedToken);
+          localStorage.setItem("user", JSON.stringify(returnedUser));
+          setUser(returnedUser);
+        } else {
+          setAuthMode("login");
+          setAuthMessage(response.data.message || "Account created successfully. Please log in.");
+        }
+      } else {
+        const response = await axios.post(`${API}/api/auth/login`, {
+          email: authForm.email.trim(),
+          password: authForm.password
+        });
+        const returnedToken = response.data.token;
+        const returnedUser = response.data.user;
+        if (!returnedToken || !returnedUser) {
+          throw new Error("Login response did not include a token and user. Check the backend login response.");
+        }
+        localStorage.setItem("token", returnedToken);
+        localStorage.setItem("user", JSON.stringify(returnedUser));
+        setUser(returnedUser);
+        setAuthForm({ name: "", email: "", password: "" });
+      }
+    } catch (error) {
+      setAuthMessage(error.response?.data?.message || error.message || "Unable to connect to the server.");
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -199,7 +251,36 @@ function App() {
   };
 
   if (!user) {
-    return <p>Please login to continue.</p>;
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "linear-gradient(135deg, #fff1f6, #f4efff)", fontFamily: "Arial, sans-serif" }}>
+        <div style={{ width: "100%", maxWidth: 430, background: "white", padding: 32, borderRadius: 22, boxShadow: "0 15px 45px rgba(100, 60, 90, 0.12)" }}>
+          <div style={{ textAlign: "center", marginBottom: 24, color: "#d94f83" }}>
+            <HeartPulse size={42} />
+            <h1 style={{ margin: "12px 0 8px", color: "#39283a", fontSize: 30, lineHeight: 1.2, fontWeight: 700, letterSpacing: "-0.5px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <span>Welcome to</span>
+              <span style={{ color: "#d94f83" }}>Sweety 💗</span>
+            </h1>
+            <p style={{ margin: 0, color: "#786b79", fontSize: 14, lineHeight: 1.5 }}>Your personal blood glucose tracker</p>
+          </div>
+          <h2 style={{ color: "#39283a" }}>{authMode === "login" ? "Login to your account" : "Create your account"}</h2>
+          <form onSubmit={handleAuthSubmit} style={{ display: "grid", gap: 13 }}>
+            {authMode === "signup" && (
+              <input required type="text" placeholder="Full name" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} style={authInputStyle} />
+            )}
+            <input required type="email" placeholder="Email address" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} style={authInputStyle} />
+            <input required minLength={6} type="password" placeholder="Password" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} style={authInputStyle} />
+            <button type="submit" disabled={authLoading} style={authButtonStyle}>{authLoading ? "Please wait..." : authMode === "login" ? "Login" : "Sign Up"}</button>
+          </form>
+          {authMessage && <p role="alert" style={{ color: "#bd315f", marginTop: 16 }}>{authMessage}</p>}
+          <p style={{ textAlign: "center", color: "#786b79", marginTop: 20 }}>
+            {authMode === "login" ? "Don't have an account? " : "Already have an account? "}
+            <button type="button" onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthMessage(""); }} style={{ border: 0, background: "none", color: "#d94f83", fontWeight: 700, cursor: "pointer" }}>
+              {authMode === "login" ? "Sign up" : "Login"}
+            </button>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const daily = reports?.daily;
